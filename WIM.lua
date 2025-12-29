@@ -297,9 +297,9 @@ local function playerCheck(player, k)
 	-- Queue WHO request for player info (class/race/level) if not cached
 	if not WIM_PlayerCache[player] and not WIM_PlayerCacheQueue[player] then
 		WIM_WhoInfo(player, function(info)
-			-- Info loaded - window will update via WIM_UpdateCharacterInfo
+			-- Info loaded - update window if exists
 			if WIM_Windows[player] then
-				WIM_UpdateCharacterInfo(player)
+				WIM_SetWhoInfo(player)
 			end
 		end)
 	end
