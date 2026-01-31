@@ -13,17 +13,24 @@ end
 function WIM_ChatEdit_ParseText(editBox, send)
 
 	local target
+	local msgText = ''
 
-	local _, _, command, parameter = strfind(editBox:GetText(), '^(/%S+)%s*(%S*)')
+	local _, _, command, rest = strfind(editBox:GetText(), '^(/%S+)%s*(.*)')
 	if command then
 		command = strupper(command)
+		rest = rest or ''
 		local i = 1
 		while true do
-			if getglobal('SLASH_WHISPER'..i) and command == strupper(TEXT(getglobal('SLASH_WHISPER'..i))) and parameter ~= '' then
-				target = gsub(strlower(parameter), '^%l', strupper)
+			if getglobal('SLASH_WHISPER'..i) and command == strupper(TEXT(getglobal('SLASH_WHISPER'..i))) and rest ~= '' then
+				local _, _, namepart, textpart = strfind(rest, '^(%S+)%s*(.*)')
+				if namepart then
+					target = gsub(strlower(namepart), '^%l', strupper)
+					msgText = textpart or ''
+				end
 				break
 			elseif getglobal('SLASH_REPLY'..i) and command == strupper(TEXT(getglobal('SLASH_REPLY'..i))) and ChatEdit_GetLastTellTarget(editBox) ~= '' then
 				target = ChatEdit_GetLastTellTarget(editBox)
+				msgText = rest or ''
 				break
 			elseif not getglobal('SLASH_WHISPER'..i) and not getglobal('SLASH_REPLY'..i) then
 				break
@@ -34,8 +41,15 @@ function WIM_ChatEdit_ParseText(editBox, send)
 
 	if target then
 		WIM_PostMessage(target, '', 5, '', '')
-		editBox:SetText('')
-		editBox:Hide()	
+		if msgText ~= '' then
+			-- Message text present (e.g. /w Name text or macro):
+			-- let WoW's original handler do the actual sending
+			return WIM_ChatEdit_ParseText_orig(editBox, send)
+		else
+			-- No message text (just /w Name): open WIM window only
+			editBox:SetText('')
+			editBox:Hide()
+		end
 	else
 		return WIM_ChatEdit_ParseText_orig(editBox, send)
 	end
@@ -455,6 +469,68 @@ function WIM_SetUpHooks()
 			frame:SetScript("OnClick", function() oldFunc(); WIM_ItemButton_OnClick(arg1); end);
 		end
 	end
+	-- Universal Link Proxy: Redirect Shift+Click links from any source to WIM
+	-- Strategy: When WIM EditBox has focus, show ChatFrameEditBox invisibly
+	-- so WoW's internal Shift+Click handlers see it as visible and insert links.
+	-- We intercept those links via OnTextChanged and redirect to WIM.
+	local wimProxyActive = false;
+	local wimProxyOrigOnTextChanged = ChatFrameEditBox:GetScript("OnTextChanged");
+	local wimProxyOrigOnShow = ChatFrameEditBox:GetScript("OnShow");
+
+	ChatFrameEditBox:SetScript("OnTextChanged", function()
+		if wimProxyActive and WIM_EditBoxInFocus then
+			local text = ChatFrameEditBox:GetText();
+			if text and text ~= "" then
+				if strfind(text, "|H") or strfind(text, "|c") then
+					WIM_EditBoxInFocus:Insert(text);
+					ChatFrameEditBox:SetText("");
+					return;
+				end
+			end
+		end
+		if wimProxyOrigOnTextChanged then
+			wimProxyOrigOnTextChanged();
+		end
+	end);
+
+	-- Monitor frame to toggle ChatFrameEditBox proxy visibility
+	local wimProxyMonitor = CreateFrame("Frame", "WIM_LinkProxyMonitor", UIParent);
+	wimProxyMonitor.elapsed = 0;
+	wimProxyMonitor:SetScript("OnUpdate", function()
+		local dt = arg1 or 0;
+		this.elapsed = this.elapsed + dt;
+		if this.elapsed < 0.1 then return; end
+		this.elapsed = 0;
+
+		if WIM_EditBoxInFocus and not wimProxyActive then
+			-- Activate proxy: make ChatFrameEditBox "visible" but non-interactive
+			wimProxyActive = true;
+			-- Suppress OnShow focus grab
+			ChatFrameEditBox:SetScript("OnShow", function() end);
+			ChatFrameEditBox:EnableMouse(false);
+			ChatFrameEditBox:EnableKeyboard(false);
+			ChatFrameEditBox:SetAlpha(0);
+			ChatFrameEditBox:Show();
+			ChatFrameEditBox:SetText("");
+			-- Restore focus to WIM EditBox (in case Show() stole it)
+			WIM_EditBoxInFocus:SetFocus();
+		elseif not WIM_EditBoxInFocus and wimProxyActive then
+			-- Deactivate proxy: restore ChatFrameEditBox to normal state
+			wimProxyActive = false;
+			ChatFrameEditBox:SetText("");
+			ChatFrameEditBox:Hide();
+			ChatFrameEditBox:EnableMouse(true);
+			ChatFrameEditBox:EnableKeyboard(true);
+			ChatFrameEditBox:SetAlpha(1);
+			-- Restore original OnShow handler
+			if wimProxyOrigOnShow then
+				ChatFrameEditBox:SetScript("OnShow", wimProxyOrigOnShow);
+			else
+				ChatFrameEditBox:SetScript("OnShow", nil);
+			end
+		end
+	end);
+
 	WIM_ButtonsHooked = true;
 end
 

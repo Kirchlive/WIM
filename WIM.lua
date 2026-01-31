@@ -167,8 +167,10 @@ WIM_Data_DEFAULTS = {
 	},
 	showAFK = true,
 	useEscape = true,
+	escapeUnfocus = false,
 	hookWispParse = true,
 	blockLowLevel = false,
+	requireAltForArrows = false,
 };
 --[initialize defualt values
 WIM_Data = WIM_Data_DEFAULTS;
@@ -254,8 +256,10 @@ function WIM_Incoming(event)
 		if(WIM_Data.versionLastLoaded == nil) then WIM_Data.versionLastLoaded = WIM_Data_DEFAULTS.versionLastLoaded; end;
 		if(WIM_Data.showAFK == nil) then WIM_Data.showAFK = WIM_Data_DEFAULTS.showAFK; end;
 		if(WIM_Data.useEscape == nil) then WIM_Data.useEscape = WIM_Data_DEFAULTS.useEscape; end;
+		if(WIM_Data.escapeUnfocus == nil) then WIM_Data.escapeUnfocus = WIM_Data_DEFAULTS.escapeUnfocus; end;
 		if(WIM_Data.hookWispParse == nil) then WIM_Data.hookWispParse = WIM_Data_DEFAULTS.hookWispParse; end;
-		
+		if(WIM_Data.requireAltForArrows == nil) then WIM_Data.requireAltForArrows = WIM_Data_DEFAULTS.requireAltForArrows; end;
+
 		if(WIM_Filters == nil) then
 			WIM_LoadDefaultFilters();
 		end
@@ -802,6 +806,7 @@ function WIM_SetWindowProps(theWin)
 	getglobal(theWin:GetName().."ScrollingMessageFrame"):SetFont("Fonts\\ARIALN.TTF",WIM_Data.fontSize);
 	getglobal(theWin:GetName().."ScrollingMessageFrame"):SetAlpha(1);
 	getglobal(theWin:GetName().."MsgBox"):SetAlpha(1);
+	getglobal(theWin:GetName().."MsgBox"):SetAltArrowKeyMode(WIM_Data.requireAltForArrows);
 	getglobal(theWin:GetName().."ShortcutFrame"):SetAlpha(1);
 	if(WIM_Data.useEscape) then
 		WIM_AddEscapeWindow(theWin);
@@ -1220,12 +1225,23 @@ end
 
 function WIM_FilterResult(theMSG)
 	if(WIM_Data.enableFilter) then
-		local key, a, b;
-		for key in WIM_Filters do
-			if(strfind(strlower(theMSG), strlower(key)) ~= nil) then
-				if(WIM_Filters[key] == "Ignore") then
+		local key;
+		for key in pairs(WIM_Filters) do
+			local action = WIM_Filters[key];
+			-- backward compat: table format from earlier version
+			if(type(action) == "table") then
+				action = action.action or "Block";
+			end
+			local matched = false;
+			if(action == "Exact") then
+				matched = (strlower(theMSG) == strlower(key));
+			else
+				matched = (strfind(strlower(theMSG), strlower(key)) ~= nil);
+			end
+			if(matched) then
+				if(action == "Ignore") then
 					return 1;
-				elseif(WIM_Filters[key] == "Block") then
+				elseif(action == "Block" or action == "Exact") then
 					return 2;
 				end
 			end

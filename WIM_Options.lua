@@ -64,8 +64,11 @@ function WIM_Options_OnShow()
 		WIM_OptionsTabbedFrameGeneralPopOnSend:SetChecked(WIM_Data.popOnSend);
 		WIM_OptionsTabbedFrameGeneralShowAFK:SetChecked(WIM_Data.showAFK);
 		WIM_OptionsTabbedFrameGeneralUseEscape:SetChecked(WIM_Data.useEscape);
+		WIM_OptionsTabbedFrameGeneralEscapeUnfocus:SetChecked(WIM_Data.escapeUnfocus);
+		WIM_Options_EscapeUnfocusClicked();
 		WIM_OptionsTabbedFrameGeneralInterceptSlashWisp:SetChecked(WIM_Data.hookWispParse);
 		WIM_OptionsTabbedFrameGeneralBlockLowLevel:SetChecked(WIM_Data.blockLowLevel);
+		WIM_OptionsTabbedFrameGeneralRequireAltArrows:SetChecked(WIM_Data.requireAltForArrows);
 		
 	--[ Window Settings
 		WIM_OptionsTabbedFrameWindowWindowWidthTitle:SetText(WIM_L_WINDOWWIDTH);
@@ -332,6 +335,24 @@ function WIM_Options_UseEscapeClicked()
 	WIM_SetAllWindowProps();
 end
 
+function WIM_Options_EscapeUnfocusClicked()
+	if(WIM_OptionsTabbedFrameGeneralEscapeUnfocus:GetChecked()) then
+		WIM_Data.escapeUnfocus = true;
+		WIM_OptionsTabbedFrameGeneralUseEscape:Disable();
+		WIM_Data.useEscape = false;
+		WIM_SetAllWindowProps();
+	else
+		WIM_Data.escapeUnfocus = false;
+		WIM_OptionsTabbedFrameGeneralUseEscape:Enable();
+		if(WIM_OptionsTabbedFrameGeneralUseEscape:GetChecked()) then
+			WIM_Data.useEscape = true;
+		else
+			WIM_Data.useEscape = false;
+		end
+		WIM_SetAllWindowProps();
+	end
+end
+
 function WIM_Options_InterceptSlashWispClicked()
 	if(WIM_OptionsTabbedFrameGeneralInterceptSlashWisp:GetChecked()) then
 		WIM_Data.hookWispParse = true;
@@ -346,6 +367,15 @@ function WIM_Options_BlockLowLevelClicked()
 	else
 		WIM_Data.blockLowLevel = false;
 	end
+end
+
+function WIM_Options_RequireAltArrowsClicked()
+	if(WIM_OptionsTabbedFrameGeneralRequireAltArrows:GetChecked()) then
+		WIM_Data.requireAltForArrows = true;
+	else
+		WIM_Data.requireAltForArrows = false;
+	end
+	WIM_SetAllWindowProps();
 end
 
 function WIM_Options_FreeMoving_Clicked()
@@ -518,17 +548,22 @@ function WIM_FilteringScrollBar_Update()
 	local line;
 	local lineplusoffset;
 	local FilteringNames = {};
-	
-	for key in WIM_Filters do
+
+	for key in pairs(WIM_Filters) do
 		table.insert(FilteringNames, key);
 	end
-	
+
 	FauxScrollFrame_Update(WIM_OptionsTabbedFrameFilterFilteringPanelScrollBar,table.getn(FilteringNames),5,16);
 	for line=1,5 do
 		lineplusoffset = line + FauxScrollFrame_GetOffset(WIM_OptionsTabbedFrameFilterFilteringPanelScrollBar);
 		if lineplusoffset <= table.getn(FilteringNames) then
+			local action = WIM_Filters[FilteringNames[lineplusoffset]];
+			-- backward compat: table format from earlier version
+			if(type(action) == "table") then
+				action = action.action or "Block";
+			end
 			getglobal("WIM_OptionsTabbedFrameFilterFilteringPanelButton"..line.."Name"):SetText(FilteringNames[lineplusoffset]);
-			getglobal("WIM_OptionsTabbedFrameFilterFilteringPanelButton"..line.."Action"):SetText(WIM_Filters[FilteringNames[lineplusoffset]]);
+			getglobal("WIM_OptionsTabbedFrameFilterFilteringPanelButton"..line.."Action"):SetText(action);
 			getglobal("WIM_OptionsTabbedFrameFilterFilteringPanelButton"..line).theFilterName = FilteringNames[lineplusoffset];
 			if ( WIM_Filter_Selected == FilteringNames[lineplusoffset] ) then
 				getglobal("WIM_OptionsTabbedFrameFilterFilteringPanelButton"..line):LockHighlight();
@@ -547,27 +582,39 @@ end
 function WIM_Options_FilteringIgnoreClicked()
 	if(WIM_Options_FilterWindow_ActionIgnore:GetChecked()) then
 		WIM_Options_FilterWindow.theAction = "Ignore";
-		WIM_Options_FilterWindow_ActionBlock:SetChecked(false);
+		WIM_Options_FilterWindow_ActionBlock:SetChecked(nil);
+		WIM_Options_FilterWindow_ActionExact:SetChecked(nil);
 	else
-		WIM_Options_FilterWindow_ActionBlock:SetChecked(true);
+		WIM_Options_FilterWindow_ActionIgnore:SetChecked(true);
 	end
 end
 
 function WIM_Options_FilteringBlockClicked()
 	if(WIM_Options_FilterWindow_ActionBlock:GetChecked()) then
 		WIM_Options_FilterWindow.theAction = "Block";
-		WIM_Options_FilterWindow_ActionIgnore:SetChecked(false);
+		WIM_Options_FilterWindow_ActionIgnore:SetChecked(nil);
+		WIM_Options_FilterWindow_ActionExact:SetChecked(nil);
 	else
-		WIM_Options_FilterWindow_ActionIgnore:SetChecked(true);
+		WIM_Options_FilterWindow_ActionBlock:SetChecked(true);
+	end
+end
+
+function WIM_Options_FilteringExactClicked()
+	if(WIM_Options_FilterWindow_ActionExact:GetChecked()) then
+		WIM_Options_FilterWindow.theAction = "Exact";
+		WIM_Options_FilterWindow_ActionIgnore:SetChecked(nil);
+		WIM_Options_FilterWindow_ActionBlock:SetChecked(nil);
+	else
+		WIM_Options_FilterWindow_ActionExact:SetChecked(true);
 	end
 end
 
 function WIM_Options_FilterWindow_Click()
 	local name = WIM_Options_FilterWindow_Name:GetText();
 	local action = WIM_Options_FilterWindow.theAction;
-	
+
 	local tname = string.gsub(name, " ", "");
-	
+
 	if(tname == "") then
 		WIM_Options_FilterWindow_Error:SetText(WIM_L_ERRINVALIDKEYWORD);
 		return;
@@ -576,13 +623,13 @@ function WIM_Options_FilterWindow_Click()
 		WIM_Options_FilterWindow_Error:SetText(WIM_L_ERRKEYWORDALREADYUSED);
 		return;
 	end
-	
+
 	WIM_Filters[name] = action;
-	
+
 	if(WIM_Options_FilterWindow.theMode == "edit" and name ~= WIM_Options_FilterWindow.prevName)then
 		WIM_Filters[WIM_Options_FilterWindow.prevName] = nil;
 	end
-	
+
 	WIM_FilteringScrollBar_Update();
 	PlaySound("igMainMenuClose");
 	WIM_Options_FilterWindow:Hide();

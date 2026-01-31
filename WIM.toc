@@ -1,7 +1,7 @@
 ## Interface: 11200
 ## Title: WIM
-## Author: Reworked by me0wg4ming
-## Version: 1.3.5
+## Author: Reworked by Kirchlive (Tetto) and Claude Code
+## Version: 1.4.0
 ## Notes: Give whispers an instant messenger feel.
 ## Notes-ruRU: Интерфейс для шепота.
 ## DefaultState: Enabled

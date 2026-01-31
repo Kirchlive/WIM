@@ -401,9 +401,13 @@
 						end
 					</OnEnterPressed>
 					<OnEscapePressed>
-						this:SetText("");
-						this:Hide();
-						this:Show();
+						if (WIM_Data.escapeUnfocus) then
+							this:ClearFocus();
+						else
+							this:SetText("");
+							this:Hide();
+							this:Show();
+						end
 					</OnEscapePressed>
 					<OnTabPressed>
 						--cycle through windows
