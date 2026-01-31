@@ -18,7 +18,7 @@
 
 Some more minor quality of life changes. 🐢
 
-## Previous Changes
+## Previous Changes v1.3.5
 - Added 30s WHO cooldown (TurtleWoW limit)
 - Messages now display immediately (WHO loads async)
 - Removed "Block Low Level" option
